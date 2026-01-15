@@ -42,12 +42,6 @@ htmlcov/
 .tox/
 .nox/
 
-# Allure
-allure-results/
-allure-report/
-.reports/
-test-results/
-
 # OS
 .DS_Store
 Thumbs.db
