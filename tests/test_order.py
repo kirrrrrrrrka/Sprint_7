@@ -24,13 +24,13 @@ class TestOrder:
         assert response.status_code == 201, f"Ожидался статус 201, получен {response.status_code}"
         assert "track" in response.json(), "Ответ не содержит track"
         
-        # Получаем ID заказа для очистки (если в API есть метод удаления заказа)
+      
         track = response.json().get("track")
         if track:
             order_response = order_api.get_order_by_track(track)
             if order_response.status_code == 200:
                 order_id = order_response.json().get("order", {}).get("id")
-                # Здесь можно добавить удаление заказа если API поддерживает
+                
 
     @allure.title("Тест: Создание заказа с черным цветом")
     def test_create_order_black_color(self):
