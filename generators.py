@@ -1,6 +1,7 @@
 import random
 import string
-import requests
+from api.courier_api import CourierApi
+from config import API_V1_URL
 
 
 def generate_random_string(length):
@@ -10,26 +11,18 @@ def generate_random_string(length):
 
 
 def register_new_courier_and_return_login_password():
-    login_pass = []
-
+    """Создание нового курьера и возврат его данных"""
     login = generate_random_string(10)
     password = generate_random_string(10)
     first_name = generate_random_string(10)
-
-    payload = {
-        "login": login,
-        "password": password,
-        "firstName": first_name
-    }
-
-    response = requests.post('https://qa-scooter.praktikum-services.ru/api/v1/courier', data=payload)
+    
+    courier_api = CourierApi()
+    
+    response = courier_api.create_courier(login, password, first_name)
 
     if response.status_code == 201:
-        login_pass.append(login)
-        login_pass.append(password)
-        login_pass.append(first_name)
-
-    return login_pass
+        return login, password, first_name
+    return None
 
 
 def generate_order_data(color=None):

@@ -1,144 +1,132 @@
 import pytest
+import allure
 import generators
 from api.courier_api import CourierApi
 from data.test_data import TestData
 
 
 class TestCourier:
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.courier_api = CourierApi()
-        self.valid_courier = TestData.VALID_COURIER
-        
-        # Генерируем уникального курьера для тестов
-        self.test_courier = generators.register_new_courier_and_return_login_password()
-        
-        # Если удалось создать курьера, получаем его ID для последующего удаления
-        if self.test_courier:
-            self.test_courier_login = self.test_courier[0]
-            self.test_courier_password = self.test_courier[1]
-            
-            # Получаем ID курьера
-            response = self.courier_api.login_courier(
-                self.test_courier_login, 
-                self.test_courier_password
-            )
-            if response.status_code == 200:
-                self.test_courier_id = response.json().get("id")
-        
-        yield
-        
+    @allure.title("Тест: Успешное создание курьера")
     def test_create_courier_success(self):
         """Тест успешного создания курьера"""
-        courier_data = generators.register_new_courier_and_return_login_password()
-        assert len(courier_data) == 3, f"Не удалось создать курьера. Ответ: {courier_data}"
+        courier_api = CourierApi()
+        login = generators.generate_random_string(10)
+        password = generators.generate_random_string(10)
+        first_name = generators.generate_random_string(10)
         
-    def test_create_courier_duplicate_login(self):
+        response = courier_api.create_courier(login, password, first_name)
+        
+        assert response.status_code == 201, f"Ожидался статус 201, получен {response.status_code}"
+        assert response.json().get("ok") == True, "Ответ не содержит ok: true"
+        
+        # Получаем ID для очистки
+        login_response = courier_api.login_courier(login, password)
+        if login_response.status_code == 200:
+            courier_id = login_response.json().get("id")
+            courier_api.delete_courier(courier_id)
+
+    @allure.title("Тест: Создание курьера с дублирующимся логином")
+    def test_create_courier_duplicate_login(self, create_test_courier):
         """Тест создания курьера с уже существующим логином"""
-        if not self.test_courier:
-            pytest.skip("Не удалось создать тестового курьера")
+        courier_api = CourierApi()
         
         # Пытаемся создать курьера с тем же логином
-        response = self.courier_api.create_courier(
-            self.test_courier_login,
+        response = courier_api.create_courier(
+            create_test_courier["login"],
             "different_password",
             "different_name"
         )
         
-        assert response.status_code == 409
-        #Проверку сообщения об ошибке
+        assert response.status_code == 409, f"Ожидался статус 409, получен {response.status_code}"
         error_message = response.json().get("message", "")
-        assert "Этот логин уже используется" in error_message
-        
+        assert "Этот логин уже используется" == error_message, f"Неверное сообщение об ошибке: {error_message}"
+
+    @allure.title("Тест: Создание курьера без логина")
     def test_create_courier_missing_login(self):
         """Тест создания курьера без логина"""
-        response = self.courier_api.create_courier(
+        courier_api = CourierApi()
+        
+        response = courier_api.create_courier(
             "",  # Пустой логин
             "password123",
             "Test Name"
         )
         
-        assert response.status_code == 400
+        assert response.status_code == 400, f"Ожидался статус 400, получен {response.status_code}"
         assert response.json()["message"] == "Недостаточно данных для создания учетной записи"
-        
+
+    @allure.title("Тест: Создание курьера без пароля")
     def test_create_courier_missing_password(self):
         """Тест создания курьера без пароля"""
-        # Уникальный логин для  теста
+        courier_api = CourierApi()
         unique_login = f"test_{generators.generate_random_string(10)}"
-        response = self.courier_api.create_courier(
+        
+        response = courier_api.create_courier(
             unique_login,
             "",  # Пустой пароль
             "Test Name"
         )
         
-        assert response.status_code == 400
+        assert response.status_code == 400, f"Ожидался статус 400, получен {response.status_code}"
         assert response.json()["message"] == "Недостаточно данных для создания учетной записи"
-        
-    def test_create_courier_without_first_name(self):
+
+    @allure.title("Тест: Создание курьера без имени")
+    def test_create_courier_missing_first_name(self):
         """Тест создания курьера без имени"""
+        courier_api = CourierApi()
         unique_login = f"test_{generators.generate_random_string(10)}"
-        response = self.courier_api.create_courier(
+        
+        response = courier_api.create_courier(
             unique_login,
             "password123",
             ""  # Пустое имя
         )
         
-        print(f"Status code for missing firstName: {response.status_code}")
-        print(f"Response: {response.json()}")
+        assert response.status_code == 400, f"Ожидался статус 400, получен {response.status_code}"
+        assert response.json()["message"] == "Недостаточно данных для создания учетной записи"
 
-        if response.status_code == 201:
-            # API позволяет создавать без имени
-            assert response.json().get("ok") == True
-        else:
-            # API не позволяет создавать без имени
-            assert response.status_code == 400
-            assert response.json()["message"] == "Недостаточно данных для создания учетной записи"
-        
-    def test_create_courier_response_ok_true(self):
-        """Тест, что успешный запрос возвращает {"ok": true}"""
-        # Создаем нового уникального курьера
-        login = generators.generate_random_string(10)
-        password = generators.generate_random_string(10)
-        first_name = generators.generate_random_string(10)
-        
-        response = self.courier_api.create_courier(login, password, first_name)
-        
-        if response.status_code == 201:
-            assert response.json()["ok"] == True
-        
-    def test_login_courier_success(self):
+    @allure.title("Тест: Успешный логин курьера")
+    def test_login_courier_success(self, create_test_courier):
         """Тест успешного логина курьера"""
-        if not self.test_courier:
-            pytest.skip("Не удалось создать тестового курьера")
+        courier_api = CourierApi()
         
-        response = self.courier_api.login_courier(
-            self.test_courier_login,
-            self.test_courier_password
+        response = courier_api.login_courier(
+            create_test_courier["login"],
+            create_test_courier["password"]
         )
         
-        assert response.status_code == 200
-        assert "id" in response.json()
-        
+        assert response.status_code == 200, f"Ожидался статус 200, получен {response.status_code}"
+        assert "id" in response.json(), "Ответ не содержит ID курьера"
+
+    @allure.title("Тест: Логин курьера без логина")
     def test_login_courier_missing_login(self):
         """Тест логина без логина"""
-        response = self.courier_api.login_courier("", "password123")
+        courier_api = CourierApi()
         
-        assert response.status_code == 400
+        response = courier_api.login_courier("", "password123")
+        
+        assert response.status_code == 400, f"Ожидался статус 400, получен {response.status_code}"
         assert response.json()["message"] == "Недостаточно данных для входа"
-        
+
+    @allure.title("Тест: Логин курьера без пароля")
     def test_login_courier_missing_password(self):
         """Тест логина без пароля"""
-        response = self.courier_api.login_courier("login123", "")
+        courier_api = CourierApi()
         
-        assert response.status_code == 400
+        response = courier_api.login_courier("login123", "")
+        
+        assert response.status_code == 400, f"Ожидался статус 400, получен {response.status_code}"
         assert response.json()["message"] == "Недостаточно данных для входа"
-        
+
+    @allure.title("Тест: Логин курьера с неверными учетными данными")
     def test_login_courier_invalid_credentials(self):
         """Тест логина с неверными учетными данными"""
-        response = self.courier_api.login_courier(
+        courier_api = CourierApi()
+        
+        response = courier_api.login_courier(
             "nonexistent_login",
             "wrong_password"
         )
         
-        assert response.status_code == 404
+        assert response.status_code == 404, f"Ожидался статус 404, получен {response.status_code}"
         assert response.json()["message"] == "Учетная запись не найдена"
